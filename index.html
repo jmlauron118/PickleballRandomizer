@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f4f6ee">
+    <title>Rally — Pickleball Randomizer</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="Rally home">
+          <span class="brand-mark" aria-hidden="true"><span></span></span>
+          <span>rally<span class="brand-period">.</span></span>
+        </a>
+        <div class="topbar-note"><span class="live-dot"></span> PICKUP SESSION</div>
+        <span class="topbar-date" id="session-date"></span>
+      </header>
+
+      <main>
+        <section class="intro">
+          <div class="intro-copy">
+            <p class="eyebrow">LESS WAITING, MORE PLAYING</p>
+            <h1>Let’s get<br><span>you on court.</span></h1>
+            <p class="intro-text">Add your crew, set the courts, and let the next game find you.</p>
+          </div>
+          <div class="pickleball-art" aria-hidden="true">
+            <div class="art-shadow"></div>
+            <div class="ball"><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="art-caption">GOOD GAMES<br>HAPPEN HERE <span>↗</span></div>
+          </div>
+        </section>
+
+        <div class="workspace">
+          <aside class="roster-panel panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">YOUR CREW</p>
+                <h2>Players <span class="count-pill" id="player-count">0</span></h2>
+              </div>
+              <span class="roster-icon" aria-hidden="true">♟</span>
+            </div>
+            <p class="panel-subtitle">Who’s playing today?</p>
+
+            <form class="add-player-form" id="add-player-form">
+              <label class="sr-only" for="player-name">Player name</label>
+              <input id="player-name" name="name" type="text" maxlength="32" placeholder="Add a player..." autocomplete="off" required>
+              <button class="add-player-button" type="submit" aria-label="Add player">+</button>
+            </form>
+
+            <div class="roster-meta">
+              <span>PLAYER LIST</span>
+              <button class="text-button" id="clear-players" type="button" hidden>Clear all</button>
+            </div>
+            <ul class="player-list" id="player-list" aria-live="polite"></ul>
+            <div class="empty-roster" id="empty-roster">
+              <span class="empty-icon" aria-hidden="true">＋</span>
+              <p>Your crew will show up here.</p>
+              <span>Add at least 2 players to get started.</span>
+            </div>
+            <div class="roster-footer">
+              <span class="avatar-stack" id="avatar-stack" aria-hidden="true"></span>
+              <span id="available-summary">0 players ready</span>
+            </div>
+          </aside>
+
+          <section class="court-area">
+            <div class="setup-panel panel">
+              <div class="setup-title">
+                <div>
+                  <p class="eyebrow">MAKE IT A MATCH</p>
+                  <h2>Set up your games</h2>
+                </div>
+                <span class="setup-step">01 <span>/</span> 02</span>
+              </div>
+              <div class="setup-controls">
+                <fieldset class="format-control">
+                  <legend>GAME FORMAT</legend>
+                  <div class="segmented" role="group" aria-label="Game format">
+                    <button type="button" class="format-option" data-format="singles" aria-pressed="false">
+                      <span class="format-icon" aria-hidden="true">1<span>×</span>1</span>
+                      Singles
+                    </button>
+                    <button type="button" class="format-option is-selected" data-format="doubles" aria-pressed="true">
+                      <span class="format-icon" aria-hidden="true">2<span>×</span>2</span>
+                      Doubles
+                    </button>
+                  </div>
+                </fieldset>
+                <div class="court-control">
+                  <span class="control-label">NUMBER OF COURTS</span>
+                  <div class="stepper" aria-label="Number of courts">
+                    <button id="remove-court" type="button" aria-label="Remove a court">−</button>
+                    <output id="court-count" aria-live="polite">2</output>
+                    <button id="add-court" type="button" aria-label="Add a court">+</button>
+                  </div>
+                </div>
+              </div>
+              <div class="setup-hint">
+                <span class="hint-spark" aria-hidden="true">✳</span>
+                <span id="setup-hint-text">Add at least 4 players to fill a doubles court.</span>
+              </div>
+            </div>
+
+            <div class="courts-heading">
+              <div>
+                <p class="eyebrow">THE ACTION</p>
+                <h2>Your courts <span class="court-live"><span class="live-dot"></span> LIVE</span></h2>
+              </div>
+              <button id="shuffle-all" class="shuffle-button" type="button">
+                <span aria-hidden="true">⤨</span> Randomize all
+              </button>
+            </div>
+            <div class="court-grid" id="court-grid"></div>
+            <p class="notice" id="notice" role="status" aria-live="polite"></p>
+          </section>
+        </div>
+        <footer class="page-footer">
+          <span>GOOD PEOPLE. GOOD GAMES.</span>
+          <span>RALLY PICKLEBALL CLUB <span class="footer-ball" aria-hidden="true">●</span></span>
+        </footer>
+      </main>
+    </div>
+
+    <dialog class="edit-dialog" id="edit-dialog">
+      <form id="edit-player-form" method="dialog">
+        <p class="eyebrow">UPDATE PLAYER</p>
+        <h2>Edit name</h2>
+        <label for="edit-player-name">Player name</label>
+        <input id="edit-player-name" name="name" type="text" maxlength="32" required>
+        <input id="edit-player-id" name="id" type="hidden">
+        <div class="dialog-actions">
+          <button class="secondary-button" value="cancel" type="button" id="cancel-edit">Cancel</button>
+          <button class="primary-button" value="save" type="submit">Save changes</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
+</html>
