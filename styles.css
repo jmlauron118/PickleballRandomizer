@@ -25,6 +25,9 @@
   --court-hover: #f4f8f0;
   --placeholder: #a3a89e;
   --card-shadow: rgba(32, 37, 29, .22);
+  --row-action-ink: #73796f;
+  --row-action-hover: #eff4e8;
+  --row-action-opacity: .4;
   font-family: "DM Sans", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -55,6 +58,9 @@
   --court-hover: #1a3028;
   --placeholder: #8b9389;
   --card-shadow: rgba(0, 0, 0, .45);
+  --row-action-ink: #c4d0c4;
+  --row-action-hover: #294034;
+  --row-action-opacity: .75;
 }
 
 * { box-sizing: border-box; }
@@ -274,7 +280,7 @@ h1 span { color: var(--green); }
 }
 .text-button { padding: 0; border: 0; background: none; color: var(--green); font-size: 9px; cursor: pointer; }
 .text-button[hidden] { display: none; }
-.player-list { list-style: none; padding: 0; margin: 0; max-height: 210px; overflow-y: auto; }
+.player-list { list-style: none; padding: 0 14px 0 0; margin: 0; max-height: 210px; overflow-y: auto; }
 .player-row { min-height: 41px; display: flex; align-items: center; gap: 9px; border-bottom: 1px solid #f0f1ed; }
 .player-rank { width: 14px; flex: 0 0 14px; color: var(--muted); font-size: 9px; font-weight: 700; text-align: center; }
 .player-avatar {
@@ -290,7 +296,7 @@ h1 span { color: var(--green); }
 }
 .player-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 600; }
 .player-record { color: var(--muted); font-size: 8px; white-space: nowrap; }
-.row-actions { display: flex; gap: 4px; opacity: .4; }
+.row-actions { display: flex; flex-shrink: 0; gap: 4px; opacity: var(--row-action-opacity); }
 .player-row:hover .row-actions, .row-actions:focus-within { opacity: 1; }
 .icon-button {
   width: 23px;
@@ -300,12 +306,12 @@ h1 span { color: var(--green); }
   padding: 0;
   border: 0;
   border-radius: 5px;
-  color: #73796f;
+  color: var(--row-action-ink);
   background: transparent;
   cursor: pointer;
   font-size: 12px;
 }
-.icon-button:hover { color: var(--green); background: #eff4e8; }
+.icon-button:hover { color: var(--green); background: var(--row-action-hover); }
 .icon-button.delete-player:hover { color: #b74436; background: #fff0ed; }
 .empty-roster { margin: auto 0; padding: 20px 0; text-align: center; }
 .empty-icon {
