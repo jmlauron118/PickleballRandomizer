@@ -1,4 +1,5 @@
 const STORAGE_KEY = "rally-pickleball-state";
+const THEME_KEY = "rally-theme";
 const COLORS = ["#eaf1df", "#edf0ff", "#fff0e9", "#e7f4f1", "#f7ecdc", "#f4e9f2"];
 
 const playerList = document.querySelector("#player-list");
@@ -28,12 +29,18 @@ function readSavedState() {
 
 const savedState = readSavedState();
 const state = {
-  players: savedState?.players?.filter((player) => player && typeof player.id === "string" && typeof player.name === "string") ?? [],
+  players: savedState?.players?.filter((player) => player && typeof player.id === "string" && typeof player.name === "string").map((player) => ({
+    id: player.id,
+    name: player.name,
+    wins: Number.isInteger(player.wins) && player.wins > 0 ? player.wins : 0,
+    losses: Number.isInteger(player.losses) && player.losses > 0 ? player.losses : 0
+  })) ?? [],
   format: savedState?.format === "singles" ? "singles" : "doubles",
   courts: savedState?.courts?.filter((court) => court && typeof court.id === "string").map((court) => ({
     id: court.id,
     round: Number.isInteger(court.round) && court.round > 0 ? court.round : 0,
-    playerIds: Array.isArray(court.playerIds) ? court.playerIds.filter((id) => typeof id === "string") : []
+    playerIds: Array.isArray(court.playerIds) ? court.playerIds.filter((id) => typeof id === "string") : [],
+    winner: court.winner === "team-a" || court.winner === "team-b" ? court.winner : null
   })) ?? []
 };
 
@@ -62,6 +69,32 @@ function showNotice(message) {
   }
 }
 
+function getPreferredTheme() {
+  const savedTheme = localStorage.getItem(THEME_KEY);
+  if (savedTheme === "dark" || savedTheme === "light") {
+    return savedTheme;
+  }
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function applyTheme(theme) {
+  const root = document.documentElement;
+  root.setAttribute("data-theme", theme);
+  localStorage.setItem(THEME_KEY, theme);
+
+  const button = document.querySelector("#theme-toggle");
+  if (!button) return;
+  const isDark = theme === "dark";
+  button.setAttribute("aria-pressed", String(isDark));
+  button.querySelector("span[aria-hidden='true']").textContent = isDark ? "☀" : "☾";
+  button.querySelector(".theme-toggle-text").textContent = isDark ? "Light mode" : "Dark mode";
+}
+
+function toggleTheme() {
+  const nextTheme = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+  applyTheme(nextTheme);
+}
+
 function playerInitials(name) {
   return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("");
 }
@@ -70,11 +103,38 @@ function playerById(id) {
   return state.players.find((player) => player.id === id);
 }
 
+function rankPlayers(players) {
+  const rankedPlayers = [...players].sort((a, b) => {
+    const aGames = Math.max(1, a.wins + a.losses);
+    const bGames = Math.max(1, b.wins + b.losses);
+    return b.wins * aGames - a.wins * bGames
+      || b.wins - a.wins
+      || a.losses - b.losses
+      || a.name.localeCompare(b.name);
+  });
+
+  let currentRank = 0;
+  return rankedPlayers.map((player, index) => {
+    const previous = rankedPlayers[index - 1];
+    const tied = previous
+      && player.wins * Math.max(1, previous.wins + previous.losses) === previous.wins * Math.max(1, player.wins + player.losses)
+      && player.wins === previous.wins
+      && player.losses === previous.losses;
+    if (!tied) currentRank = index + 1;
+    return { ...player, rank: currentRank };
+  });
+}
+
 function renderPlayers() {
   playerList.replaceChildren();
-  state.players.forEach((player, index) => {
+  rankPlayers(state.players).forEach((player, index) => {
     const item = document.createElement("li");
     item.className = "player-row";
+
+    const rank = document.createElement("span");
+    rank.className = "player-rank";
+    rank.textContent = player.rank;
+    rank.setAttribute("aria-label", `Rank ${player.rank}`);
 
     const avatar = document.createElement("span");
     avatar.className = "player-avatar";
@@ -84,6 +144,11 @@ function renderPlayers() {
     const name = document.createElement("span");
     name.className = "player-name";
     name.textContent = player.name;
+
+    const record = document.createElement("span");
+    record.className = "player-record";
+    record.textContent = `W ${player.wins} · L ${player.losses}`;
+    record.setAttribute("aria-label", `${player.wins} wins, ${player.losses} losses`);
 
     const actions = document.createElement("span");
     actions.className = "row-actions";
@@ -105,7 +170,7 @@ function renderPlayers() {
     remove.addEventListener("click", () => removePlayer(player.id));
 
     actions.append(edit, remove);
-    item.append(avatar, name, actions);
+    item.append(rank, avatar, name, record, actions);
     playerList.append(item);
   });
 
@@ -157,6 +222,25 @@ function renderCourts() {
       match.className = "match-row";
       match.append(makeTeam(assignedPlayers.slice(0, teamSize), "team-a"), makeVs(), makeTeam(assignedPlayers.slice(teamSize), "team-b"));
       body.append(match);
+
+      const winnerControl = document.createElement("div");
+      winnerControl.className = "winner-control";
+      const winnerLabel = document.createElement("span");
+      winnerLabel.className = "winner-label";
+      winnerLabel.textContent = court.winner ? "CHANGE WINNER" : "TAG WINNER";
+      const winnerActions = document.createElement("div");
+      winnerActions.className = "winner-actions";
+      ["team-a", "team-b"].forEach((team) => {
+        const winnerButton = document.createElement("button");
+        winnerButton.className = `winner-button${court.winner === team ? " is-selected" : ""}`;
+        winnerButton.type = "button";
+        winnerButton.textContent = `${team === "team-a" ? "Team A" : "Team B"} won`;
+        winnerButton.setAttribute("aria-pressed", String(court.winner === team));
+        winnerButton.addEventListener("click", () => recordWinner(court.id, team));
+        winnerActions.append(winnerButton);
+      });
+      winnerControl.append(winnerLabel, winnerActions);
+      body.append(winnerControl);
     } else {
       const empty = document.createElement("div");
       empty.className = "court-empty";
@@ -174,7 +258,10 @@ function renderCourts() {
     status.className = "court-status";
     const dot = document.createElement("span");
     dot.className = "status-dot";
-    status.append(dot, document.createTextNode(court.playerIds.length === playersPerCourt ? "In play" : "Waiting"));
+    const statusText = court.winner
+      ? `${court.winner === "team-a" ? "Team A" : "Team B"} won`
+      : court.playerIds.length === playersPerCourt ? "In play" : "Waiting";
+    status.append(dot, document.createTextNode(statusText));
     const next = document.createElement("button");
     next.className = "next-game";
     next.type = "button";
@@ -230,6 +317,30 @@ function makeVs() {
   return label;
 }
 
+function adjustCourtRecord(court, winner, amount) {
+  const teamSize = state.format === "singles" ? 1 : 2;
+  court.playerIds.forEach((playerId, index) => {
+    const player = playerById(playerId);
+    if (!player) return;
+    const playerWon = (index < teamSize) === (winner === "team-a");
+    const result = playerWon ? "wins" : "losses";
+    player[result] = Math.max(0, player[result] + amount);
+  });
+}
+
+function recordWinner(courtId, winner) {
+  const court = state.courts.find((item) => item.id === courtId);
+  const playersPerCourt = state.format === "singles" ? 2 : 4;
+  if (!court || (winner !== "team-a" && winner !== "team-b") || court.playerIds.length !== playersPerCourt) return;
+  if (court.winner === winner) return;
+
+  if (court.winner) adjustCourtRecord(court, court.winner, -1);
+  adjustCourtRecord(court, winner, 1);
+  court.winner = winner;
+  saveState();
+  render();
+}
+
 function shuffle(items) {
   const result = [...items];
   for (let i = result.length - 1; i > 0; i -= 1) {
@@ -257,6 +368,7 @@ function randomizeCourt(courtId) {
     ...shuffle(returningPlayers).slice(0, Math.max(0, amount - restedPlayers.length))
   ];
   court.playerIds = shuffle(selectedPlayers).map((player) => player.id);
+  court.winner = null;
   court.round += 1;
   showNotice("");
   render();
@@ -267,6 +379,7 @@ function resetCourt(courtId) {
   if (!court) return;
   court.playerIds = [];
   court.round = 0;
+  court.winner = null;
   showNotice("");
   saveState();
   render();
@@ -277,6 +390,7 @@ function randomizeAll() {
   let pool = shuffle(state.players);
   let filled = 0;
   state.courts.forEach((court) => {
+    court.winner = null;
     court.playerIds = pool.splice(0, amount).map((player) => player.id);
     if (court.playerIds.length === amount) {
       court.round += 1;
@@ -307,6 +421,7 @@ function removePlayer(playerId) {
   state.courts.forEach((court) => {
     if (court.playerIds.includes(playerId)) {
       court.playerIds = [];
+      court.winner = null;
     }
   });
   saveState();
@@ -318,6 +433,9 @@ function render() {
   renderCourts();
 }
 
+document.querySelector("#theme-toggle").addEventListener("click", toggleTheme);
+applyTheme(getPreferredTheme());
+
 document.querySelector("#add-player-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const input = document.querySelector("#player-name");
@@ -328,7 +446,7 @@ document.querySelector("#add-player-form").addEventListener("submit", (event) =>
     input.focus();
     return;
   }
-  state.players.push({ id: makeId(), name });
+  state.players.push({ id: makeId(), name, wins: 0, losses: 0 });
   input.value = "";
   showNotice("");
   saveState();
@@ -363,7 +481,10 @@ document.querySelectorAll(".format-option").forEach((button) => {
   button.addEventListener("click", () => {
     if (button.dataset.format === state.format) return;
     state.format = button.dataset.format;
-    state.courts.forEach((court) => { court.playerIds = []; });
+    state.courts.forEach((court) => {
+      court.playerIds = [];
+      court.winner = null;
+    });
     showNotice("Format changed. Randomize to create new matchups.");
     saveState();
     render();

@@ -16,7 +16,13 @@
           <span>rally<span class="brand-period">.</span></span>
         </a>
         <div class="topbar-note"><span class="live-dot"></span> PICKUP SESSION</div>
-        <span class="topbar-date" id="session-date"></span>
+        <div class="topbar-actions">
+          <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle dark mode" aria-pressed="false">
+            <span aria-hidden="true">☾</span>
+            <span class="theme-toggle-text">Dark mode</span>
+          </button>
+          <span class="topbar-date" id="session-date"></span>
+        </div>
       </header>
 
       <main>
@@ -51,7 +57,7 @@
             </form>
 
             <div class="roster-meta">
-              <span>PLAYER LIST</span>
+              <span>PLAYER RANKINGS</span>
               <button class="text-button" id="clear-players" type="button" hidden>Clear all</button>
             </div>
             <ul class="player-list" id="player-list" aria-live="polite"></ul>
