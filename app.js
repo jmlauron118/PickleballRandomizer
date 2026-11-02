@@ -6,6 +6,7 @@ const playerList = document.querySelector("#player-list");
 const courtGrid = document.querySelector("#court-grid");
 const notice = document.querySelector("#notice");
 const editDialog = document.querySelector("#edit-dialog");
+const resultsDialog = document.querySelector("#results-dialog");
 let noticeTimeout;
 
 function makeId() {
@@ -33,7 +34,11 @@ const state = {
     id: player.id,
     name: player.name,
     wins: Number.isInteger(player.wins) && player.wins > 0 ? player.wins : 0,
-    losses: Number.isInteger(player.losses) && player.losses > 0 ? player.losses : 0
+    losses: Number.isInteger(player.losses) && player.losses > 0 ? player.losses : 0,
+    gamesPlayed: Number.isInteger(player.gamesPlayed) && player.gamesPlayed >= 0
+      ? player.gamesPlayed
+      : (Number.isInteger(player.wins) && player.wins > 0 ? player.wins : 0)
+        + (Number.isInteger(player.losses) && player.losses > 0 ? player.losses : 0)
   })) ?? [],
   format: savedState?.format === "singles" ? "singles" : "doubles",
   courts: savedState?.courts?.filter((court) => court && typeof court.id === "string").map((court) => ({
@@ -127,14 +132,9 @@ function rankPlayers(players) {
 
 function renderPlayers() {
   playerList.replaceChildren();
-  rankPlayers(state.players).forEach((player, index) => {
+  state.players.forEach((player, index) => {
     const item = document.createElement("li");
     item.className = "player-row";
-
-    const rank = document.createElement("span");
-    rank.className = "player-rank";
-    rank.textContent = player.rank;
-    rank.setAttribute("aria-label", `Rank ${player.rank}`);
 
     const avatar = document.createElement("span");
     avatar.className = "player-avatar";
@@ -144,11 +144,6 @@ function renderPlayers() {
     const name = document.createElement("span");
     name.className = "player-name";
     name.textContent = player.name;
-
-    const record = document.createElement("span");
-    record.className = "player-record";
-    record.textContent = `W ${player.wins} · L ${player.losses}`;
-    record.setAttribute("aria-label", `${player.wins} wins, ${player.losses} losses`);
 
     const actions = document.createElement("span");
     actions.className = "row-actions";
@@ -170,7 +165,7 @@ function renderPlayers() {
     remove.addEventListener("click", () => removePlayer(player.id));
 
     actions.append(edit, remove);
-    item.append(rank, avatar, name, record, actions);
+    item.append(avatar, name, actions);
     playerList.append(item);
   });
 
@@ -341,6 +336,57 @@ function recordWinner(courtId, winner) {
   render();
 }
 
+function renderResults() {
+  const list = document.querySelector("#results-list");
+  list.replaceChildren();
+  if (state.players.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "results-empty";
+    empty.textContent = "Add players to see the session standings.";
+    list.append(empty);
+    return;
+  }
+  rankPlayers(state.players).forEach((player, index) => {
+    const item = document.createElement("li");
+    item.className = `result-row${index < 3 ? ` result-place-${index + 1}` : ""}`;
+
+    const rank = document.createElement("span");
+    rank.className = "result-rank";
+    rank.textContent = String(index + 1);
+    rank.setAttribute("aria-label", `Place ${index + 1}`);
+
+    const name = document.createElement("span");
+    name.className = "result-name";
+    name.textContent = player.name;
+
+    const record = document.createElement("span");
+    record.className = "result-record";
+    record.textContent = `${player.wins} W · ${player.losses} L`;
+
+    item.append(rank, name, record);
+    list.append(item);
+  });
+}
+
+function clearRecords() {
+  state.players.forEach((player) => {
+    player.wins = 0;
+    player.losses = 0;
+    player.gamesPlayed = 0;
+  });
+}
+
+function resetAll() {
+  clearRecords();
+  state.courts.forEach((court) => {
+    court.playerIds = [];
+    court.round = 0;
+    court.winner = null;
+  });
+  saveState();
+  render();
+}
+
 function shuffle(items) {
   const result = [...items];
   for (let i = result.length - 1; i > 0; i -= 1) {
@@ -350,6 +396,13 @@ function shuffle(items) {
   return result;
 }
 
+function selectFairPlayers(eligiblePlayers, amount, previousPlayers = new Set()) {
+  return shuffle(eligiblePlayers)
+    .sort((a, b) => a.gamesPlayed - b.gamesPlayed
+      || Number(previousPlayers.has(a.id)) - Number(previousPlayers.has(b.id)))
+    .slice(0, amount);
+}
+
 function randomizeCourt(courtId) {
   const court = state.courts.find((item) => item.id === courtId);
   if (!court) return;
@@ -357,20 +410,17 @@ function randomizeCourt(courtId) {
   const amount = state.format === "singles" ? 2 : 4;
   const previousPlayers = new Set(court.playerIds);
   const available = state.players.filter((player) => !busy.has(player.id));
-  const restedPlayers = available.filter((player) => !previousPlayers.has(player.id));
-  const returningPlayers = available.filter((player) => previousPlayers.has(player.id));
   if (available.length < amount) {
     showNotice(`Court ${state.courts.indexOf(court) + 1} needs ${amount} available players; ${available.length} ${available.length === 1 ? "is" : "are"} free.`);
     return;
   }
-  const selectedPlayers = [
-    ...shuffle(restedPlayers).slice(0, amount),
-    ...shuffle(returningPlayers).slice(0, Math.max(0, amount - restedPlayers.length))
-  ];
+  const selectedPlayers = selectFairPlayers(available, amount, previousPlayers);
+  selectedPlayers.forEach((player) => { player.gamesPlayed += 1; });
   court.playerIds = shuffle(selectedPlayers).map((player) => player.id);
   court.winner = null;
   court.round += 1;
   showNotice("");
+  saveState();
   render();
 }
 
@@ -387,12 +437,16 @@ function resetCourt(courtId) {
 
 function randomizeAll() {
   const amount = state.format === "singles" ? 2 : 4;
-  let pool = shuffle(state.players);
+  let pool = [...state.players];
   let filled = 0;
   state.courts.forEach((court) => {
     court.winner = null;
-    court.playerIds = pool.splice(0, amount).map((player) => player.id);
-    if (court.playerIds.length === amount) {
+    if (pool.length >= amount) {
+      const selectedPlayers = selectFairPlayers(pool, amount);
+      const selectedIds = new Set(selectedPlayers.map((player) => player.id));
+      selectedPlayers.forEach((player) => { player.gamesPlayed += 1; });
+      pool = pool.filter((player) => !selectedIds.has(player.id));
+      court.playerIds = shuffle(selectedPlayers).map((player) => player.id);
       court.round += 1;
       filled += 1;
     } else {
@@ -406,6 +460,7 @@ function randomizeAll() {
   } else {
     showNotice("");
   }
+  saveState();
   render();
 }
 
@@ -446,7 +501,7 @@ document.querySelector("#add-player-form").addEventListener("submit", (event) =>
     input.focus();
     return;
   }
-  state.players.push({ id: makeId(), name, wins: 0, losses: 0 });
+  state.players.push({ id: makeId(), name, wins: 0, losses: 0, gamesPlayed: 0 });
   input.value = "";
   showNotice("");
   saveState();
@@ -471,9 +526,18 @@ document.querySelector("#edit-player-form").addEventListener("submit", (event) =
 });
 
 document.querySelector("#cancel-edit").addEventListener("click", () => editDialog.close());
+document.querySelector("#show-results").addEventListener("click", () => {
+  renderResults();
+  resultsDialog.showModal();
+});
+document.querySelector("#close-results").addEventListener("click", () => resultsDialog.close());
+document.querySelector("#reset-records").addEventListener("click", resetAll);
 document.querySelector("#clear-players").addEventListener("click", () => {
   state.players = [];
-  state.courts.forEach((court) => { court.playerIds = []; });
+  state.courts.forEach((court) => {
+    court.playerIds = [];
+    court.winner = null;
+  });
   saveState();
   render();
 });

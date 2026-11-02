@@ -57,8 +57,12 @@
             </form>
 
             <div class="roster-meta">
-              <span>PLAYER RANKINGS</span>
-              <button class="text-button" id="clear-players" type="button" hidden>Clear all</button>
+              <span>PLAYER ROSTER</span>
+              <div class="roster-tools">
+                <button class="text-button" id="show-results" type="button">Results</button>
+                <button class="text-button" id="reset-records" type="button">Reset All</button>
+                <button class="text-button" id="clear-players" type="button" hidden>Clear all</button>
+              </div>
             </div>
             <ul class="player-list" id="player-list" aria-live="polite"></ul>
             <div class="empty-roster" id="empty-roster">
@@ -142,6 +146,17 @@
           <button class="primary-button" value="save" type="submit">Save changes</button>
         </div>
       </form>
+    </dialog>
+
+    <dialog class="results-dialog" id="results-dialog" aria-labelledby="results-title">
+      <div class="results-heading">
+        <div>
+          <p class="eyebrow">SESSION STANDINGS</p>
+          <h2 id="results-title">Player results</h2>
+        </div>
+        <button class="icon-button" id="close-results" type="button" aria-label="Close results">×</button>
+      </div>
+      <ol class="results-list" id="results-list" aria-live="polite"></ol>
     </dialog>
   </body>
 </html>
