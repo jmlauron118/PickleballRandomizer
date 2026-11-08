@@ -7,7 +7,11 @@ const courtGrid = document.querySelector("#court-grid");
 const notice = document.querySelector("#notice");
 const editDialog = document.querySelector("#edit-dialog");
 const resultsDialog = document.querySelector("#results-dialog");
+const recordDialog = document.querySelector("#record-dialog");
+const confirmDialog = document.querySelector("#confirm-dialog");
 let noticeTimeout;
+let activeRecord = null;
+let pendingConfirmation = null;
 
 function makeId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -29,24 +33,48 @@ function readSavedState() {
 }
 
 const savedState = readSavedState();
+const savedMatches = Array.isArray(savedState?.matches) ? savedState.matches : [];
 const state = {
   players: savedState?.players?.filter((player) => player && typeof player.id === "string" && typeof player.name === "string").map((player) => ({
     id: player.id,
     name: player.name,
     wins: Number.isInteger(player.wins) && player.wins > 0 ? player.wins : 0,
-    losses: Number.isInteger(player.losses) && player.losses > 0 ? player.losses : 0,
-    gamesPlayed: Number.isInteger(player.gamesPlayed) && player.gamesPlayed >= 0
-      ? player.gamesPlayed
-      : (Number.isInteger(player.wins) && player.wins > 0 ? player.wins : 0)
-        + (Number.isInteger(player.losses) && player.losses > 0 ? player.losses : 0)
+    losses: Number.isInteger(player.losses) && player.losses > 0 ? player.losses : 0
   })) ?? [],
   format: savedState?.format === "singles" ? "singles" : "doubles",
   courts: savedState?.courts?.filter((court) => court && typeof court.id === "string").map((court) => ({
     id: court.id,
     round: Number.isInteger(court.round) && court.round > 0 ? court.round : 0,
     playerIds: Array.isArray(court.playerIds) ? court.playerIds.filter((id) => typeof id === "string") : [],
-    winner: court.winner === "team-a" || court.winner === "team-b" ? court.winner : null
-  })) ?? []
+    winner: court.winner === "team-a" || court.winner === "team-b" ? court.winner : null,
+    matchId: typeof court.matchId === "string" ? court.matchId : null
+  })) ?? [],
+  matches: savedMatches.filter((match) => match
+    && typeof match.id === "string"
+    && Number.isInteger(match.number) && match.number > 0
+    && (match.winner === "team-a" || match.winner === "team-b")
+    && (match.teamSize === 1 || match.teamSize === 2)
+    && Array.isArray(match.playerIds) && match.playerIds.every((id) => typeof id === "string")
+    && Array.isArray(match.playerNames) && match.playerNames.every((name) => typeof name === "string")
+    && match.playerIds.length === match.playerNames.length
+    && match.playerIds.length === match.teamSize * 2
+    && [11, 15, 21].includes(match.gameTo)
+    && Number.isInteger(match.losingScore) && match.losingScore >= 0 && match.losingScore <= 10)
+    .map((match) => ({
+      id: match.id,
+      number: match.number,
+      courtId: typeof match.courtId === "string" ? match.courtId : "",
+      playerIds: [...match.playerIds],
+      playerNames: [...match.playerNames],
+      teamSize: match.teamSize,
+      winner: match.winner,
+      gameTo: match.gameTo,
+      losingScore: match.losingScore
+    })) ?? [],
+  nextMatchNumber: Math.max(
+    Number.isInteger(savedState?.nextMatchNumber) && savedState.nextMatchNumber > 0 ? savedState.nextMatchNumber : 1,
+    savedMatches.reduce((max, match) => Number.isInteger(match?.number) ? Math.max(max, match.number + 1) : max, 1)
+  )
 };
 
 if (state.courts.length === 0) {
@@ -108,13 +136,24 @@ function playerById(id) {
   return state.players.find((player) => player.id === id);
 }
 
+function opponentScoreFor(player) {
+  return state.matches.reduce((total, match) => {
+    const playerIndex = match.playerIds.indexOf(player.id);
+    if (playerIndex < 0) return total;
+    const playerWon = (playerIndex < match.teamSize) === (match.winner === "team-a");
+    return total + (playerWon ? match.losingScore : match.gameTo);
+  }, 0);
+}
+
 function rankPlayers(players) {
-  const rankedPlayers = [...players].sort((a, b) => {
+  const rankedPlayers = players.map((player) => ({
+    ...player,
+    opponentScore: opponentScoreFor(player)
+  })).sort((a, b) => {
     const aGames = Math.max(1, a.wins + a.losses);
     const bGames = Math.max(1, b.wins + b.losses);
     return b.wins * aGames - a.wins * bGames
-      || b.wins - a.wins
-      || a.losses - b.losses
+      || a.opponentScore - b.opponentScore
       || a.name.localeCompare(b.name);
   });
 
@@ -123,8 +162,7 @@ function rankPlayers(players) {
     const previous = rankedPlayers[index - 1];
     const tied = previous
       && player.wins * Math.max(1, previous.wins + previous.losses) === previous.wins * Math.max(1, player.wins + player.losses)
-      && player.wins === previous.wins
-      && player.losses === previous.losses;
+      && player.opponentScore === previous.opponentScore;
     if (!tied) currentRank = index + 1;
     return { ...player, rank: currentRank };
   });
@@ -288,6 +326,71 @@ function renderCourts() {
   });
 }
 
+function renderMatchLog() {
+  const list = document.querySelector("#match-log-list");
+  const empty = document.querySelector("#match-log-empty");
+  const query = document.querySelector("#match-search").value.trim().toLocaleLowerCase();
+  list.replaceChildren();
+  const matches = [...state.matches].reverse().filter((match) => {
+    if (!query) return true;
+    const searchText = [
+      match.number,
+      ...match.playerNames,
+      match.gameTo,
+      match.losingScore,
+      `${match.gameTo}-${match.losingScore}`,
+      `${match.gameTo}–${match.losingScore}`
+    ].join(" ").toLocaleLowerCase();
+    return searchText.includes(query);
+  });
+  empty.hidden = matches.length > 0;
+  empty.textContent = query ? "No matches found." : "Completed games will appear here.";
+  matches.forEach((match) => {
+    const row = document.createElement("tr");
+    const winnerTeam = match.winner === "team-a" ? 0 : 1;
+    const winnerNames = match.playerNames.slice(winnerTeam * match.teamSize, (winnerTeam + 1) * match.teamSize);
+    const loserNames = match.playerNames.slice((1 - winnerTeam) * match.teamSize, (2 - winnerTeam) * match.teamSize);
+    const values = [
+      { className: "match-number", text: String(match.number) },
+      { className: "match-winner", text: winnerNames.join(" & ") },
+      { className: "match-loser", text: loserNames.join(" & ") },
+      { className: "match-score", text: `${match.gameTo}–${match.losingScore}` }
+    ];
+    values.forEach(({ className, text }) => {
+      const cell = document.createElement("td");
+      cell.className = className;
+      cell.textContent = text;
+      row.append(cell);
+    });
+
+    const actions = document.createElement("td");
+    actions.className = "match-actions";
+    const swap = document.createElement("button");
+    swap.className = "match-action";
+    swap.type = "button";
+    swap.textContent = "Swap winner";
+    swap.setAttribute("aria-label", `Swap winner for Match ${match.number}`);
+    swap.addEventListener("click", () => swapMatchWinner(match.id));
+    const remove = document.createElement("button");
+    remove.className = "match-action match-delete";
+    remove.type = "button";
+    remove.textContent = "Delete Match";
+    remove.setAttribute("aria-label", `Delete Match ${match.number}`);
+    remove.addEventListener("click", () => confirmAction(
+      `Delete Match ${match.number}?`,
+      "This will remove the match from the log and update player records.",
+      () => deleteMatch(match.id),
+      "Delete Match"
+    ));
+    actions.append(swap, remove);
+    row.append(actions);
+    list.append(row);
+  });
+  list.style.maxHeight = matches.length > 15
+    ? `${[...list.rows].slice(0, 15).reduce((height, row) => height + row.offsetHeight, 0)}px`
+    : "";
+}
+
 function makeTeam(players, className) {
   const team = document.createElement("div");
   team.className = `team ${className}`;
@@ -312,28 +415,169 @@ function makeVs() {
   return label;
 }
 
-function adjustCourtRecord(court, winner, amount) {
+function recordWinner(courtId, winner) {
+  const court = state.courts.find((item) => item.id === courtId);
+  const playersPerCourt = state.format === "singles" ? 2 : 4;
+  if (!court || (winner !== "team-a" && winner !== "team-b") || court.playerIds.length !== playersPerCourt) return;
+  activeRecord = {
+    courtId,
+    winner,
+    gameTo: 11,
+    losingScore: null,
+    legacyWinner: !state.matches.some((match) => match.id === court.matchId) ? court.winner : null
+  };
+  const previous = state.matches.find((match) => match.id === court.matchId);
+  if (previous) {
+    activeRecord.gameTo = previous.gameTo;
+    activeRecord.losingScore = previous.losingScore;
+  }
+  renderRecordDialog();
+  recordDialog.showModal();
+}
+
+function renderRecordDialog() {
+  const court = state.courts.find((item) => item.id === activeRecord?.courtId);
+  if (!court || !activeRecord) return;
   const teamSize = state.format === "singles" ? 1 : 2;
-  court.playerIds.forEach((playerId, index) => {
+  const teams = [
+    court.playerIds.slice(0, teamSize).map(playerById).filter(Boolean),
+    court.playerIds.slice(teamSize).map(playerById).filter(Boolean)
+  ];
+  const container = document.querySelector("#record-teams");
+  container.replaceChildren();
+  teams.forEach((teamPlayers, index) => {
+    const team = index === 0 ? "team-a" : "team-b";
+    const winning = activeRecord.winner === team;
+    const row = document.createElement("div");
+    row.className = `record-team${winning ? " is-winning" : ""}`;
+    const badge = document.createElement("span");
+    badge.className = `record-badge${winning ? " is-win" : ""}`;
+    badge.textContent = winning ? "WIN" : "LOSE";
+    const names = document.createElement("span");
+    names.className = "record-team-names";
+    names.textContent = teamPlayers.map((player) => player.name).join(" & ");
+    const score = document.createElement("strong");
+    score.className = "record-team-score";
+    score.textContent = winning ? String(activeRecord.gameTo) : activeRecord.losingScore === null ? "—" : String(activeRecord.losingScore);
+    row.append(badge, names, score);
+    container.append(row);
+  });
+  const targets = document.querySelector("#game-targets");
+  targets.replaceChildren();
+  [11, 15, 21].forEach((target) => {
+    const button = document.createElement("button");
+    button.className = `record-choice${activeRecord.gameTo === target ? " is-selected" : ""}`;
+    button.type = "button";
+    button.textContent = `${activeRecord.gameTo === target ? "✓ " : ""}${target}`;
+    button.setAttribute("aria-pressed", String(activeRecord.gameTo === target));
+    button.addEventListener("click", () => {
+      activeRecord.gameTo = target;
+      renderRecordDialog();
+    });
+    targets.append(button);
+  });
+  const losingScores = document.querySelector("#losing-scores");
+  losingScores.replaceChildren();
+  for (let score = 0; score <= 10; score += 1) {
+    const button = document.createElement("button");
+    button.className = `record-choice${activeRecord.losingScore === score ? " is-selected" : ""}`;
+    button.type = "button";
+    button.textContent = String(score);
+    button.setAttribute("aria-pressed", String(activeRecord.losingScore === score));
+    button.addEventListener("click", () => {
+      activeRecord.losingScore = score;
+      renderRecordDialog();
+    });
+    losingScores.append(button);
+  }
+  document.querySelector("#record-match-form button[type='submit']").disabled = activeRecord.losingScore === null;
+}
+
+function applyMatchRecord(match, amount) {
+  match.playerIds.forEach((playerId, index) => {
     const player = playerById(playerId);
     if (!player) return;
-    const playerWon = (index < teamSize) === (winner === "team-a");
+    const playerWon = (index < match.teamSize) === (match.winner === "team-a");
     const result = playerWon ? "wins" : "losses";
     player[result] = Math.max(0, player[result] + amount);
   });
 }
 
-function recordWinner(courtId, winner) {
-  const court = state.courts.find((item) => item.id === courtId);
-  const playersPerCourt = state.format === "singles" ? 2 : 4;
-  if (!court || (winner !== "team-a" && winner !== "team-b") || court.playerIds.length !== playersPerCourt) return;
-  if (court.winner === winner) return;
-
-  if (court.winner) adjustCourtRecord(court, court.winner, -1);
-  adjustCourtRecord(court, winner, 1);
-  court.winner = winner;
+function saveMatchResult() {
+  if (!activeRecord || activeRecord.losingScore === null) return;
+  const court = state.courts.find((item) => item.id === activeRecord.courtId);
+  if (!court) return;
+  const existing = state.matches.find((match) => match.id === court.matchId);
+  if (existing) {
+    applyMatchRecord(existing, -1);
+    existing.winner = activeRecord.winner;
+    existing.gameTo = activeRecord.gameTo;
+    existing.losingScore = activeRecord.losingScore;
+    applyMatchRecord(existing, 1);
+  } else {
+    const teamSize = state.format === "singles" ? 1 : 2;
+    const players = court.playerIds.map(playerById).filter(Boolean);
+    if (players.length !== teamSize * 2) return;
+    const match = {
+      id: makeId(),
+      number: state.nextMatchNumber,
+      courtId: court.id,
+      playerIds: players.map((player) => player.id),
+      playerNames: players.map((player) => player.name),
+      teamSize,
+      winner: activeRecord.winner,
+      gameTo: activeRecord.gameTo,
+      losingScore: activeRecord.losingScore
+    };
+    state.matches.push(match);
+    state.nextMatchNumber += 1;
+    court.matchId = match.id;
+    if (activeRecord.legacyWinner) {
+      match.winner = activeRecord.legacyWinner;
+      applyMatchRecord(match, -1);
+      match.winner = activeRecord.winner;
+    }
+    applyMatchRecord(match, 1);
+  }
+  court.winner = activeRecord.winner;
+  activeRecord = null;
+  recordDialog.close();
   saveState();
   render();
+}
+
+function swapMatchWinner(matchId) {
+  const match = state.matches.find((entry) => entry.id === matchId);
+  if (!match) return;
+  applyMatchRecord(match, -1);
+  match.winner = match.winner === "team-a" ? "team-b" : "team-a";
+  applyMatchRecord(match, 1);
+  const court = state.courts.find((entry) => entry.matchId === match.id);
+  if (court) court.winner = match.winner;
+  saveState();
+  render();
+}
+
+function deleteMatch(matchId) {
+  const index = state.matches.findIndex((entry) => entry.id === matchId);
+  if (index < 0) return;
+  const [match] = state.matches.splice(index, 1);
+  applyMatchRecord(match, -1);
+  const court = state.courts.find((entry) => entry.matchId === match.id);
+  if (court) {
+    court.matchId = null;
+    court.winner = null;
+  }
+  saveState();
+  render();
+}
+
+function confirmAction(title, message, action, confirmLabel) {
+  document.querySelector("#confirm-title").textContent = title;
+  document.querySelector("#confirm-message").textContent = message;
+  document.querySelector("#accept-confirm").textContent = confirmLabel;
+  pendingConfirmation = action;
+  confirmDialog.showModal();
 }
 
 function renderResults() {
@@ -352,18 +596,28 @@ function renderResults() {
 
     const rank = document.createElement("span");
     rank.className = "result-rank";
-    rank.textContent = String(index + 1);
+    const medals = ["🥇", "🥈", "🥉"];
+    rank.textContent = index < medals.length ? medals[index] : String(index + 1);
+    rank.classList.toggle("result-rank-medal", index < medals.length);
     rank.setAttribute("aria-label", `Place ${index + 1}`);
 
     const name = document.createElement("span");
     name.className = "result-name";
     name.textContent = player.name;
 
+    const stats = document.createElement("span");
+    stats.className = "result-stats";
     const record = document.createElement("span");
     record.className = "result-record";
     record.textContent = `${player.wins} W · ${player.losses} L`;
+    const gamesPlayed = player.wins + player.losses;
+    const winRate = gamesPlayed ? Math.round((player.wins / gamesPlayed) * 100) : 0;
+    const metrics = document.createElement("span");
+    metrics.className = "result-metrics";
+    metrics.textContent = `${gamesPlayed} ${gamesPlayed === 1 ? "game" : "games"} · ${winRate}% win rate`;
+    stats.append(record, metrics);
 
-    item.append(rank, name, record);
+    item.append(rank, name, stats);
     list.append(item);
   });
 }
@@ -372,16 +626,18 @@ function clearRecords() {
   state.players.forEach((player) => {
     player.wins = 0;
     player.losses = 0;
-    player.gamesPlayed = 0;
   });
 }
 
 function resetAll() {
   clearRecords();
+  state.matches = [];
+  state.nextMatchNumber = 1;
   state.courts.forEach((court) => {
     court.playerIds = [];
     court.round = 0;
     court.winner = null;
+    court.matchId = null;
   });
   saveState();
   render();
@@ -398,7 +654,7 @@ function shuffle(items) {
 
 function selectFairPlayers(eligiblePlayers, amount, previousPlayers = new Set()) {
   return shuffle(eligiblePlayers)
-    .sort((a, b) => a.gamesPlayed - b.gamesPlayed
+    .sort((a, b) => (a.wins + a.losses) - (b.wins + b.losses)
       || Number(previousPlayers.has(a.id)) - Number(previousPlayers.has(b.id)))
     .slice(0, amount);
 }
@@ -406,6 +662,7 @@ function selectFairPlayers(eligiblePlayers, amount, previousPlayers = new Set())
 function randomizeCourt(courtId) {
   const court = state.courts.find((item) => item.id === courtId);
   if (!court) return;
+  const completed = Boolean(court.winner || state.matches.some((match) => match.id === court.matchId));
   const busy = new Set(state.courts.filter((item) => item.id !== courtId).flatMap((item) => item.playerIds));
   const amount = state.format === "singles" ? 2 : 4;
   const previousPlayers = new Set(court.playerIds);
@@ -415,10 +672,10 @@ function randomizeCourt(courtId) {
     return;
   }
   const selectedPlayers = selectFairPlayers(available, amount, previousPlayers);
-  selectedPlayers.forEach((player) => { player.gamesPlayed += 1; });
   court.playerIds = shuffle(selectedPlayers).map((player) => player.id);
   court.winner = null;
-  court.round += 1;
+  court.matchId = null;
+  if (court.round === 0 || completed) court.round += 1;
   showNotice("");
   saveState();
   render();
@@ -428,8 +685,8 @@ function resetCourt(courtId) {
   const court = state.courts.find((item) => item.id === courtId);
   if (!court) return;
   court.playerIds = [];
-  court.round = 0;
   court.winner = null;
+  court.matchId = null;
   showNotice("");
   saveState();
   render();
@@ -440,14 +697,15 @@ function randomizeAll() {
   let pool = [...state.players];
   let filled = 0;
   state.courts.forEach((court) => {
+    const completed = Boolean(court.winner || state.matches.some((match) => match.id === court.matchId));
     court.winner = null;
+    court.matchId = null;
     if (pool.length >= amount) {
       const selectedPlayers = selectFairPlayers(pool, amount);
       const selectedIds = new Set(selectedPlayers.map((player) => player.id));
-      selectedPlayers.forEach((player) => { player.gamesPlayed += 1; });
       pool = pool.filter((player) => !selectedIds.has(player.id));
       court.playerIds = shuffle(selectedPlayers).map((player) => player.id);
-      court.round += 1;
+      if (court.round === 0 || completed) court.round += 1;
       filled += 1;
     } else {
       court.playerIds = [];
@@ -477,6 +735,7 @@ function removePlayer(playerId) {
     if (court.playerIds.includes(playerId)) {
       court.playerIds = [];
       court.winner = null;
+      court.matchId = null;
     }
   });
   saveState();
@@ -486,6 +745,7 @@ function removePlayer(playerId) {
 function render() {
   renderPlayers();
   renderCourts();
+  renderMatchLog();
 }
 
 document.querySelector("#theme-toggle").addEventListener("click", toggleTheme);
@@ -501,7 +761,7 @@ document.querySelector("#add-player-form").addEventListener("submit", (event) =>
     input.focus();
     return;
   }
-  state.players.push({ id: makeId(), name, wins: 0, losses: 0, gamesPlayed: 0 });
+  state.players.push({ id: makeId(), name, wins: 0, losses: 0 });
   input.value = "";
   showNotice("");
   saveState();
@@ -531,15 +791,30 @@ document.querySelector("#show-results").addEventListener("click", () => {
   resultsDialog.showModal();
 });
 document.querySelector("#close-results").addEventListener("click", () => resultsDialog.close());
-document.querySelector("#reset-records").addEventListener("click", resetAll);
+document.querySelector("#reset-records").addEventListener("click", () => {
+  confirmAction(
+    "Reset all records?",
+    "This will clear match history, player records, and current court assignments.",
+    resetAll,
+    "Reset All"
+  );
+});
 document.querySelector("#clear-players").addEventListener("click", () => {
-  state.players = [];
-  state.courts.forEach((court) => {
-    court.playerIds = [];
-    court.winner = null;
-  });
-  saveState();
-  render();
+  confirmAction(
+    "Clear all players?",
+    "This will remove every player and clear current court assignments. Match log history will remain.",
+    () => {
+      state.players = [];
+      state.courts.forEach((court) => {
+        court.playerIds = [];
+        court.winner = null;
+        court.matchId = null;
+      });
+      saveState();
+      render();
+    },
+    "Clear all"
+  );
 });
 document.querySelectorAll(".format-option").forEach((button) => {
   button.addEventListener("click", () => {
@@ -548,6 +823,7 @@ document.querySelectorAll(".format-option").forEach((button) => {
     state.courts.forEach((court) => {
       court.playerIds = [];
       court.winner = null;
+      court.matchId = null;
     });
     showNotice("Format changed. Randomize to create new matchups.");
     saveState();
@@ -566,6 +842,27 @@ document.querySelector("#remove-court").addEventListener("click", () => {
   render();
 });
 document.querySelector("#shuffle-all").addEventListener("click", randomizeAll);
+document.querySelector("#match-search").addEventListener("input", renderMatchLog);
+document.querySelector("#accept-confirm").addEventListener("click", () => {
+  const action = pendingConfirmation;
+  pendingConfirmation = null;
+  confirmDialog.close();
+  action?.();
+});
+document.querySelector("#cancel-confirm").addEventListener("click", () => confirmDialog.close());
+confirmDialog.addEventListener("close", () => { pendingConfirmation = null; });
+document.querySelector("#record-match-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  saveMatchResult();
+});
+document.querySelector("#record-swap").addEventListener("click", () => {
+  if (!activeRecord) return;
+  activeRecord.winner = activeRecord.winner === "team-a" ? "team-b" : "team-a";
+  renderRecordDialog();
+});
+document.querySelector("#close-record").addEventListener("click", () => recordDialog.close());
+document.querySelector("#cancel-record").addEventListener("click", () => recordDialog.close());
+recordDialog.addEventListener("close", () => { activeRecord = null; });
 
 document.querySelector("#session-date").textContent = new Intl.DateTimeFormat(undefined, {
   weekday: "short", month: "short", day: "numeric", year: "numeric"

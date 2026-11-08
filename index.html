@@ -83,7 +83,6 @@
                   <p class="eyebrow">MAKE IT A MATCH</p>
                   <h2>Set up your games</h2>
                 </div>
-                <span class="setup-step">01 <span>/</span> 02</span>
               </div>
               <div class="setup-controls">
                 <fieldset class="format-control">
@@ -124,6 +123,31 @@
               </button>
             </div>
             <div class="court-grid" id="court-grid"></div>
+            <section class="match-log panel" aria-labelledby="match-log-title">
+              <div class="match-log-heading">
+                <div>
+                  <p class="eyebrow">SESSION HISTORY</p>
+                  <h2 id="match-log-title">Match log</h2>
+                </div>
+                <label class="sr-only" for="match-search">Search matches</label>
+                <input id="match-search" class="match-search" type="search" placeholder="Search matches..." autocomplete="off">
+              </div>
+              <div class="match-log-table-wrap">
+                <table class="match-log-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Match</th>
+                      <th scope="col">Win</th>
+                      <th scope="col">Loss</th>
+                      <th scope="col">Score</th>
+                      <th scope="col"><span class="sr-only">Actions</span></th>
+                    </tr>
+                  </thead>
+                  <tbody id="match-log-list"></tbody>
+                </table>
+                <p class="match-log-empty" id="match-log-empty">Completed games will appear here.</p>
+              </div>
+            </section>
             <p class="notice" id="notice" role="status" aria-live="polite"></p>
           </section>
         </div>
@@ -157,6 +181,41 @@
         <button class="icon-button" id="close-results" type="button" aria-label="Close results">×</button>
       </div>
       <ol class="results-list" id="results-list" aria-live="polite"></ol>
+    </dialog>
+
+    <dialog class="confirm-dialog" id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+      <form method="dialog">
+        <p class="eyebrow">PLEASE CONFIRM</p>
+        <h2 id="confirm-title">Are you sure?</h2>
+        <p id="confirm-message"></p>
+        <div class="confirm-actions">
+          <button class="secondary-button" id="cancel-confirm" type="button">Cancel</button>
+          <button class="confirm-danger-button" id="accept-confirm" type="button">Confirm</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="record-dialog" id="record-dialog" aria-labelledby="record-title">
+      <form id="record-match-form">
+        <div class="record-heading">
+          <h2 id="record-title">Record result</h2>
+          <button class="icon-button" id="close-record" type="button" aria-label="Close record result">×</button>
+        </div>
+        <div class="record-teams" id="record-teams"></div>
+        <button class="record-swap" id="record-swap" type="button"><span aria-hidden="true">↔</span> Change winner</button>
+        <fieldset class="record-score-group">
+          <legend>GAME TO</legend>
+          <div class="record-game-targets" id="game-targets"></div>
+        </fieldset>
+        <fieldset class="record-score-group">
+          <legend>LOSE SCORE</legend>
+          <div class="record-losing-scores" id="losing-scores"></div>
+        </fieldset>
+        <div class="record-actions">
+          <button class="secondary-button" id="cancel-record" type="button">Cancel</button>
+          <button class="primary-button" type="submit">Save result</button>
+        </div>
+      </form>
     </dialog>
   </body>
 </html>
