@@ -172,6 +172,26 @@
       </form>
     </dialog>
 
+    <dialog class="replace-dialog" id="replace-dialog" aria-labelledby="replace-title">
+      <form id="replace-player-form">
+        <div class="replace-heading">
+          <div>
+            <p class="eyebrow">COURT LINEUP</p>
+            <h2 id="replace-title">Change player</h2>
+          </div>
+          <button class="icon-button" id="close-replace" type="button" aria-label="Close change player">×</button>
+        </div>
+        <p class="replace-description" id="replace-description"></p>
+        <label for="replacement-player">Choose a player</label>
+        <select id="replacement-player" required></select>
+        <p class="replace-empty" id="replace-empty" hidden>No players are free. Add a player or clear another court first.</p>
+        <div class="replace-actions">
+          <button class="secondary-button" id="random-replacement" type="button">Pick randomly</button>
+          <button class="primary-button" id="save-replacement" type="submit">Change player</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog class="results-dialog" id="results-dialog" aria-labelledby="results-title">
       <div class="results-heading">
         <div>

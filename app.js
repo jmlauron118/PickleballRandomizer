@@ -6,11 +6,13 @@ const playerList = document.querySelector("#player-list");
 const courtGrid = document.querySelector("#court-grid");
 const notice = document.querySelector("#notice");
 const editDialog = document.querySelector("#edit-dialog");
+const replaceDialog = document.querySelector("#replace-dialog");
 const resultsDialog = document.querySelector("#results-dialog");
 const recordDialog = document.querySelector("#record-dialog");
 const confirmDialog = document.querySelector("#confirm-dialog");
 let noticeTimeout;
 let activeRecord = null;
+let activeReplacement = null;
 let pendingConfirmation = null;
 
 function makeId() {
@@ -129,7 +131,11 @@ function toggleTheme() {
 }
 
 function playerInitials(name) {
-  return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("");
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const letters = words.length > 1
+    ? words.slice(0, 2).map((word) => Array.from(word)[0])
+    : Array.from(words[0] ?? "").slice(0, 2);
+  return letters.length ? `${letters[0]}${letters[1] ?? letters[0]}`.toLocaleUpperCase() : "";
 }
 
 function playerById(id) {
@@ -253,7 +259,7 @@ function renderCourts() {
     if (assignedPlayers.length === playersPerCourt) {
       const match = document.createElement("div");
       match.className = "match-row";
-      match.append(makeTeam(assignedPlayers.slice(0, teamSize), "team-a"), makeVs(), makeTeam(assignedPlayers.slice(teamSize), "team-b"));
+      match.append(makeTeam(assignedPlayers.slice(0, teamSize), "team-a", court.id, index + 1), makeVs(), makeTeam(assignedPlayers.slice(teamSize), "team-b", court.id, index + 1));
       body.append(match);
 
       const winnerControl = document.createElement("div");
@@ -326,6 +332,22 @@ function renderCourts() {
   });
 }
 
+function makeMatchActionIcon(pathData) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.8");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", pathData);
+  svg.append(path);
+  return svg;
+}
+
 function renderMatchLog() {
   const list = document.querySelector("#match-log-list");
   const empty = document.querySelector("#match-log-empty");
@@ -368,14 +390,16 @@ function renderMatchLog() {
     const swap = document.createElement("button");
     swap.className = "match-action";
     swap.type = "button";
-    swap.textContent = "Swap winner";
+    swap.title = "Swap winner";
     swap.setAttribute("aria-label", `Swap winner for Match ${match.number}`);
+    swap.append(makeMatchActionIcon("M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4"));
     swap.addEventListener("click", () => swapMatchWinner(match.id));
     const remove = document.createElement("button");
     remove.className = "match-action match-delete";
     remove.type = "button";
-    remove.textContent = "Delete Match";
+    remove.title = "Delete Match";
     remove.setAttribute("aria-label", `Delete Match ${match.number}`);
+    remove.append(makeMatchActionIcon("M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v7M14 10v7"));
     remove.addEventListener("click", () => confirmAction(
       `Delete Match ${match.number}?`,
       "This will remove the match from the log and update player records.",
@@ -391,18 +415,27 @@ function renderMatchLog() {
     : "";
 }
 
-function makeTeam(players, className) {
+function makeTeam(players, className, courtId, courtNumber) {
   const team = document.createElement("div");
   team.className = `team ${className}`;
   players.forEach((player) => {
-    const entry = document.createElement("div");
+    const entry = document.createElement("button");
     entry.className = "team-player";
+    entry.type = "button";
+    entry.setAttribute("aria-label", `Change ${player.name} on Court ${courtNumber}`);
+    entry.title = `Change ${player.name}`;
+    entry.addEventListener("click", () => openReplaceDialog(courtId, player.id));
     const avatar = document.createElement("span");
     avatar.className = "mini-avatar";
     avatar.textContent = playerInitials(player.name);
     const name = document.createElement("span");
+    name.className = "team-player-name";
     name.textContent = player.name;
-    entry.append(avatar, name);
+    const change = document.createElement("span");
+    change.className = "team-player-change";
+    change.setAttribute("aria-hidden", "true");
+    change.textContent = "↻";
+    entry.append(avatar, name, change);
     team.append(entry);
   });
   return team;
@@ -681,6 +714,54 @@ function randomizeCourt(courtId) {
   render();
 }
 
+function availableReplacementPlayers() {
+  const assigned = new Set(state.courts.flatMap((court) => court.playerIds));
+  return state.players.filter((player) => !assigned.has(player.id));
+}
+
+function openReplaceDialog(courtId, playerId) {
+  const court = state.courts.find((item) => item.id === courtId);
+  const player = playerById(playerId);
+  if (!court?.playerIds.includes(playerId) || !player) return;
+
+  activeReplacement = { courtId, playerId };
+  const courtNumber = state.courts.indexOf(court) + 1;
+  document.querySelector("#replace-description").textContent = `Replace ${player.name} on Court ${courtNumber}. The other players will stay in place.`;
+
+  const select = document.querySelector("#replacement-player");
+  select.replaceChildren();
+  const available = availableReplacementPlayers().sort((a, b) => a.name.localeCompare(b.name));
+  available.forEach((candidate) => {
+    const option = document.createElement("option");
+    option.value = candidate.id;
+    option.textContent = candidate.name;
+    select.append(option);
+  });
+  const empty = available.length === 0;
+  select.disabled = empty;
+  document.querySelector("#replace-empty").hidden = !empty;
+  document.querySelector("#random-replacement").disabled = empty;
+  document.querySelector("#save-replacement").disabled = empty;
+  replaceDialog.showModal();
+  if (!empty) select.focus();
+}
+
+function replaceCourtPlayer(courtId, playerId, replacementId) {
+  const court = state.courts.find((item) => item.id === courtId);
+  const slot = court?.playerIds.indexOf(playerId) ?? -1;
+  if (slot < 0 || !availableReplacementPlayers().some((player) => player.id === replacementId)) return false;
+
+  const completed = Boolean(court.winner || state.matches.some((match) => match.id === court.matchId));
+  court.playerIds[slot] = replacementId;
+  court.winner = null;
+  court.matchId = null;
+  if (completed) court.round += 1;
+  showNotice("");
+  saveState();
+  render();
+  return true;
+}
+
 function resetCourt(courtId) {
   const court = state.courts.find((item) => item.id === courtId);
   if (!court) return;
@@ -786,6 +867,21 @@ document.querySelector("#edit-player-form").addEventListener("submit", (event) =
 });
 
 document.querySelector("#cancel-edit").addEventListener("click", () => editDialog.close());
+document.querySelector("#replace-player-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!activeReplacement) return;
+  const replacementId = document.querySelector("#replacement-player").value;
+  if (replaceCourtPlayer(activeReplacement.courtId, activeReplacement.playerId, replacementId)) replaceDialog.close();
+});
+document.querySelector("#random-replacement").addEventListener("click", () => {
+  if (!activeReplacement) return;
+  const available = availableReplacementPlayers();
+  if (available.length === 0) return;
+  const player = available[Math.floor(Math.random() * available.length)];
+  if (replaceCourtPlayer(activeReplacement.courtId, activeReplacement.playerId, player.id)) replaceDialog.close();
+});
+document.querySelector("#close-replace").addEventListener("click", () => replaceDialog.close());
+replaceDialog.addEventListener("close", () => { activeReplacement = null; });
 document.querySelector("#show-results").addEventListener("click", () => {
   renderResults();
   resultsDialog.showModal();

@@ -83,7 +83,7 @@ body {
 
 button, input { font: inherit; }
 button { color: inherit; }
-button:focus-visible, input:focus-visible, a:focus-visible {
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible {
   outline: 3px solid rgba(40, 107, 69, .4);
   outline-offset: 3px;
 }
@@ -458,8 +458,10 @@ h1 span { color: var(--green); }
 .winner-button:hover, .winner-button.is-selected { border-color: var(--green); color: var(--green); background: var(--badge); }
 .winner-button.is-selected { box-shadow: inset 0 0 0 1px var(--green); }
 .team { display: flex; flex-direction: column; gap: 7px; }
-.team-player { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--ink); font-size: 9px; font-weight: 600; }
-.team-player span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-player { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; padding: 0; border: 0; color: var(--ink); background: transparent; text-align: left; font-size: 9px; font-weight: 600; cursor: pointer; }
+.team-player:hover .team-player-name { color: var(--green); text-decoration: underline; }
+.team-player-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-player-change { flex: 0 0 auto; color: var(--green); font-size: 14px; line-height: 1; }
 .mini-avatar { width: 21px; height: 21px; flex: 0 0 21px; display: grid; place-items: center; border-radius: 50%; background: #eaf1df; color: var(--green); font-size: 7px; font-weight: 700; }
 .team-b .mini-avatar { background: #fff0e9; color: #bb694d; }
 .vs { color: #b3b7af; font-size: 8px; font-weight: 700; }
@@ -500,14 +502,27 @@ h1 span { color: var(--green); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 .edit-dialog { width: min(360px, calc(100% - 32px)); padding: 25px; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 20px 80px rgba(32, 37, 29, .22); }
-.edit-dialog, .results-dialog, .confirm-dialog { color: var(--ink); background: var(--paper); }
-.edit-dialog::backdrop, .results-dialog::backdrop, .confirm-dialog::backdrop { background: rgba(28, 37, 27, .36); }
+.edit-dialog, .replace-dialog, .results-dialog, .confirm-dialog { color: var(--ink); background: var(--paper); }
+.edit-dialog::backdrop, .replace-dialog::backdrop, .results-dialog::backdrop, .confirm-dialog::backdrop { background: rgba(28, 37, 27, .36); }
 .edit-dialog form { display: flex; flex-direction: column; }
 .edit-dialog .eyebrow { margin-bottom: 7px; }
 .edit-dialog h2 { margin: 0 0 18px; font: 700 19px Manrope, sans-serif; }
 .edit-dialog label { margin-bottom: 6px; font-size: 10px; font-weight: 600; }
 .edit-dialog input[type="text"] { height: 39px; font-size: 12px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.replace-dialog { width: min(390px, calc(100% - 32px)); padding: 24px; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 20px 80px rgba(32, 37, 29, .22); }
+.replace-dialog form { display: flex; flex-direction: column; }
+.replace-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.replace-heading .eyebrow { margin-bottom: 7px; }
+.replace-heading h2 { margin: 0; font: 700 19px Manrope, sans-serif; }
+.replace-description { margin: 10px 0 20px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.replace-dialog label { margin-bottom: 6px; font-size: 10px; font-weight: 600; }
+.replace-dialog select { height: 39px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--field); font-size: 12px; }
+.replace-empty { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.replace-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.replace-actions .primary-button { min-height: 34px; padding: 0 12px; border: 0; border-radius: 6px; color: var(--button-text); background: var(--green); font-size: 10px; font-weight: 700; cursor: pointer; }
+.replace-actions .primary-button:hover:not(:disabled) { background: var(--green-dark); }
+.replace-actions button:disabled { opacity: .5; cursor: not-allowed; }
 .secondary-button { min-height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--paper); font-size: 10px; cursor: pointer; }
 .secondary-button:hover { border-color: var(--green); background: var(--court-hover); }
 .confirm-dialog {
@@ -573,13 +588,15 @@ h1 span { color: var(--green); }
 .match-log-table th { padding: 8px 7px; color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
 .match-log-table td { padding: 10px 7px; border-top: 1px solid var(--line); font-size: 11px; }
 .match-log-table th:first-child, .match-log-table td:first-child { padding-left: 0; }
-.match-log-table th:last-child, .match-log-table td:last-child { padding-right: 0; }
+.match-log-table th:last-child, .match-log-table td:last-child { width: 74px; padding-right: 0; }
 .match-number { width: 50px; color: var(--muted); font-weight: 600; }
 .match-winner { min-width: 100px; font-weight: 700; }
 .match-loser { min-width: 100px; color: var(--muted); }
 .match-score { white-space: nowrap; font-weight: 700; }
-.match-actions { min-width: 152px; text-align: right; white-space: nowrap; }
-.match-action { padding: 5px 7px; border: 0; border-radius: 5px; color: var(--green); background: transparent; font-size: 9px; font-weight: 600; cursor: pointer; }
+.match-actions { text-align: right; white-space: nowrap; }
+.match-action { display: inline-grid; width: 28px; height: 28px; place-items: center; padding: 0; border: 0; border-radius: 5px; color: var(--green); background: transparent; cursor: pointer; vertical-align: middle; }
+.match-action + .match-action { margin-left: 4px; }
+.match-action svg { width: 16px; height: 16px; }
 .match-action:hover { background: var(--court-hover); }
 .match-action.match-delete { color: #a14f3a; }
 .match-log-empty { margin: 0; padding: 14px 0 5px; color: var(--muted); font-size: 11px; }
